@@ -11,11 +11,6 @@
   <img src="https://img.shields.io/badge/ML-Imitation%20Learning-EE4C2C?logo=pytorch&logoColor=white">
 </p>
 
----
-
-## 🎬 데모
-
-https://github.com/hslee0722/Smart_Factory/blob/main/compress.mp4
 
 ---
 
