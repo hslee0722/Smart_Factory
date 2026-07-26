@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>로봇 미션 대시보드</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --surface2: #273348; --border: #334155;
+      --text: #e2e8f0; --text-muted: #94a3b8; --text-faint: #64748b;
+      --blue: #38bdf8; --blue-bg: rgba(56,189,248,0.08); --blue-border: rgba(56,189,248,0.3);
+      --green: #4ade80; --green-bg: rgba(74,222,128,0.08); --green-border: rgba(74,222,128,0.3);
+      --amber: #fbbf24; --amber-bg: rgba(251,191,36,0.08); --amber-border: rgba(251,191,36,0.3);
+      --red: #f87171; --red-bg: rgba(248,113,113,0.08); --red-border: rgba(248,113,113,0.3);
+      --radius: 10px; --radius-sm: 6px;
+    }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px 16px; }
+    
+    /* ─── 레이아웃 분할 (좌/우) ─── */
+    .layout-wrapper {
+      display: flex;
+      flex-direction: row;
+      gap: 24px;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      align-items: stretch;
+    }
+    .left-col {
+      flex: 1;
+      min-width: 380px;
+      max-width: 450px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .right-col {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .topbar { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .topbar-left i { font-size: 22px; color: var(--blue); }
+    .topbar-title { font-size: 17px; font-weight: 600; color: var(--text); }
+    .topbar-sub { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+    .sys-badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-muted); background: var(--surface); transition: all 0.2s; }
+    .sys-badge.ready { color: var(--green); background: var(--green-bg); border-color: var(--green-border); }
+    .sys-badge.running { color: var(--blue); background: var(--blue-bg); border-color: var(--blue-border); }
+    .sys-badge.stopped { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-border); }
+    
+    .panel { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .panel-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; }
+    
+    .robot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .robot-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; cursor: pointer; transition: border-color 0.15s, background 0.15s; user-select: none; }
+    .robot-card:hover { border-color: #475569; }
+    .robot-card.selected { border-color: var(--blue-border); background: var(--blue-bg); }
+    .robot-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .robot-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .robot-name i { font-size: 16px; color: var(--text-muted); }
+    .robot-card.selected .robot-name i { color: var(--blue); }
+    .robot-check { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; transition: all 0.15s; }
+    .robot-card.selected .robot-check { background: var(--blue); border-color: var(--blue); color: #0f172a; }
+    .robot-status { font-size: 12px; color: var(--text-faint); display: flex; align-items: center; gap: 5px; }
+    
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.3s; }
+    .dot.waiting { background: var(--amber); }
+    .dot.ready { background: var(--green); }
+    .dot.off { background: var(--border); }
+
+    /* ─── 배터리 바 ─── */
+    .battery-wrap { height: 5px; background: var(--border); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+    .battery-bar  { height: 100%; width: 100%; background: var(--green); border-radius: 3px; transition: width 0.5s, background 0.3s; }
+    .battery-text { font-size: 11px; color: var(--text-faint); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+    .battery-text i { font-size: 13px; }
+
+    /* ─── 배터리 경고 토스트 ─── */
+    #battery-alert {
+      display: none;
+      position: fixed;
+      top: 24px; right: 24px;
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      color: var(--red);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      font-size: 14px; font-weight: 600;
+      z-index: 999;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      animation: fadein 0.3s;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+    #battery-alert.show { display: flex; }
+    @keyframes fadein { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+    
+    .metric-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric-card { background: var(--surface2); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .metric-val { font-size: 22px; font-weight: 700; color: var(--text); }
+    .metric-lbl { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+    
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn { padding: 13px; border: 1px solid; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: opacity 0.15s, transform 0.1s; }
+    .btn:active:not(:disabled) { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-start { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
+    .btn-stop  { background: var(--red-bg);   color: var(--red);   border-color: var(--red-border); }
+    .btn-signal { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); padding: 11px; }
+    
+    .log-box { background: #0d1626; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; height: 150px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+    .log-entry { font-size: 12px; display: flex; gap: 10px; line-height: 1.5; }
+    .log-ts { color: var(--text-faint); flex-shrink: 0; }
+    .log-msg.info    { color: var(--blue); }
+    .log-msg.success { color: var(--green); }
+    .log-msg.warn    { color: var(--amber); }
+    .log-msg.error   { color: var(--red); }
+
+    /* ─── 맵 캔버스 영역 스타일 ─── */
+    .map-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #mapContainer {
+      position: relative;
+      height: 100%;
+      width: auto;
+      max-width: 100%;
+      aspect-ratio: 48 / 69;
+      background-color: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      image-rendering: pixelated;
+    }
+    #mapCanvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      image-rendering: pixelated;
+    }
+    .legend {
+      display: flex; gap: 20px; justify-content: center; margin-top: 10px; font-size: 13px; font-weight: 600;
+    }
+
+    /* ─── 상단 탭바 ─── */
+    .tabbar { max-width: 1400px; margin: 0 auto 20px; display: flex; gap: 10px; }
+    .tab {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 11px 18px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text-muted); font-size: 14px; font-weight: 600;
+      text-decoration: none; transition: .15s;
+    }
+    .tab i { font-size: 16px; }
+    .tab:hover { color: var(--text); border-color: #475569; }
+    .tab.active { color: var(--amber); border-color: var(--amber-border); background: var(--amber-bg); }
+  </style>
+</head>
+<body>
+
+  <!-- 배터리 경고 토스트 -->
+  <div id="battery-alert">
+    <i class="ti ti-battery-exclamation" style="font-size:18px;"></i>
+    <span id="alert-msg">배터리 부족!</span>
+  </div>
+
+  <div class="tabbar">
+    <a class="tab active" href="/"><i class="ti ti-radar-2"></i> 실시간 관제</a>
+    <a class="tab" href="/stats"><i class="ti ti-chart-bar"></i> 공정 통계</a>
+  </div>
+
+  <div class="layout-wrapper">
+    <div class="left-col">
+      <div class="topbar">
+        <div class="topbar-left">
+          <i class="ti ti-robot"></i>
+          <div>
+            <div class="topbar-title">미션 관리 대시보드</div>
+            <div class="topbar-sub">AutoFactory ROS2 Control System</div>
+          </div>
+        </div>
+        <span class="sys-badge" id="sys-badge">대기 중</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label">로봇 선택</div>
+        <div class="robot-grid">
+          <div class="robot-card selected" id="card-1" onclick="toggleRobot(1)">
+            <div class="robot-card-top">
+              <div class="robot-name"><i class="ti ti-device-gamepad-2"></i> Waffle 1</div>
+              <div class="robot-check" id="check-1"><i class="ti ti-check"></i></div>
+            </div>
+            <div class="robot-status">
+              <span class="dot waiting" id="dot-1"></span>
+              <span id="rstatus-1">구동 대기 중</span>
+            </div>
+            <div class="battery-wrap"><div class="battery-bar" id="bat-bar-1"></div></div>
+            <div class="battery-text" id="bat-text-1"><i class="ti ti-battery-2"></i> --%</div>
+          </div>
+          <div class="robot-card selected" id="card-2" onclick="toggleRobot(2)">
+            <div class="robot-card-top">
+              <div class="robot-name"><i class="ti ti-device-gamepad-2"></i> Waffle 2</div>
+              <div class="robot-check" id="check-2"><i class="ti ti-check"></i></div>
+            </div>
+            <div class="robot-status">
+              <span class="dot waiting" id="dot-2"></span>
+              <span id="rstatus-2">구동 대기 중</span>
+            </div>
+            <div class="battery-wrap"><div class="battery-bar" id="bat-bar-2"></div></div>
+            <div class="battery-text" id="bat-text-2"><i class="ti ti-battery-2"></i> --%</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label">시스템 상태</div>
+        <div class="metric-row">
+          <div class="metric-card">
+            <div class="metric-val" id="m-active">0 / 0</div>
+            <div class="metric-lbl">활성 로봇</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-ready">0 / 0</div>
+            <div class="metric-lbl">준비 완료</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-mission">대기</div>
+            <div class="metric-lbl">미션 상태</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label">미션 제어</div>
+        <div class="btn-row">
+          <button class="btn btn-start" id="btn-start" onclick="sendStart()" disabled>
+            <i class="ti ti-player-play"></i> 미션 시작
+          </button>
+          <button class="btn btn-stop" id="btn-pause" onclick="togglePause()" disabled>
+            <i class="ti ti-player-pause"></i> 미션 정지
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label">외부 신호</div>
+        <div class="btn-row">
+          <button class="btn btn-signal" id="btn-a" onclick="sendSignal('A')" disabled>
+            <i class="ti ti-lock-open"></i> A 구역 해제
+          </button>
+          <button class="btn btn-signal" id="btn-c" onclick="sendSignal('C')" disabled>
+            <i class="ti ti-lock-open"></i> C 구역 해제
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-label">시스템 로그</div>
+        <div class="log-box" id="log-box"></div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="panel" style="height: 100%;">
+        <div class="panel-label">실시간 위치 모니터링</div>
+        
+        <div class="map-area">
+          <div id="mapContainer">
+            <canvas id="mapCanvas"></canvas>
+          </div>
+        </div>
+
+        <div class="legend">
+          <div style="color: #38bdf8;"><i class="ti ti-circle-filled"></i> Waffle 1</div>
+          <div style="color: #f87171;"><i class="ti ti-circle-filled"></i> Waffle 2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ==========================================
+  // 기존 컨트롤러 스크립트
+  // ==========================================
+  const state = { selected: [true, true], keepout: [false, false], running: false, paused: false };
+
+  function ts() { return new Date().toTimeString().slice(0, 8); }
+
+  function addLog(msg, type = 'info') {
+    const box = document.getElementById('log-box');
+    const el = document.createElement('div');
+    el.className = 'log-entry';
+    el.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-msg ${type}">${msg}</span>`;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function updateUI() {
+    const selCount = state.selected.filter(Boolean).length;
+    const readyCount = state.selected.map((s, i) => s && state.keepout[i]).filter(Boolean).length;
+    const allReady = selCount > 0 && readyCount === selCount;
+
+    document.getElementById('m-active').textContent = `${selCount} / 2`;
+    document.getElementById('m-ready').textContent = `${readyCount} / ${selCount || 0}`;
+
+    const btnStart = document.getElementById('btn-start');
+    const btnPause = document.getElementById('btn-pause');
+
+    btnStart.disabled = !allReady || state.running;
+    btnPause.disabled = !state.running;
+
+    const badge = document.getElementById('sys-badge');
+    const missionEl = document.getElementById('m-mission');
+    
+    if (state.running) {
+      if (state.paused) {
+        badge.className = 'sys-badge stopped'; badge.textContent = '일시정지';
+        missionEl.textContent = '정지됨';
+        btnPause.className = 'btn btn-start'; 
+        btnPause.innerHTML = '<i class="ti ti-player-play"></i> 미션 재개';
+      } else {
+        badge.className = 'sys-badge running'; badge.textContent = '운영 중';
+        missionEl.textContent = '실행 중';
+        btnPause.className = 'btn btn-stop'; 
+        btnPause.innerHTML = '<i class="ti ti-player-pause"></i> 미션 정지';
+      }
+    } else if (allReady) {
+      badge.className = 'sys-badge ready'; badge.textContent = '준비 완료';
+      missionEl.textContent = '준비';
+    } else {
+      badge.className = 'sys-badge'; badge.textContent = '대기 중';
+      missionEl.textContent = '대기';
+    }
+  }
+
+  function toggleRobot(idx) {
+    if(state.running) {
+        addLog("미션 시작 후 로봇 변경 불가", "warn");
+        return;
+    }
+    const i = idx - 1;
+    state.selected[i] = !state.selected[i];
+
+    const card = document.getElementById(`card-${idx}`);
+    const dot = document.getElementById(`dot-${idx}`);
+    const statusEl = document.getElementById(`rstatus-${idx}`);
+
+    if (state.selected[i]) {
+      card.classList.add('selected');
+      if (state.keepout[i]) {
+        dot.className = 'dot ready';
+        statusEl.textContent = '준비 완료';
+      } else {
+        dot.className = 'dot waiting';
+        statusEl.textContent = '구동 대기 중';
+      }
+      addLog(`Waffle ${idx} 활성화됨`, 'info');
+    } else {
+      card.classList.remove('selected');
+      dot.className = 'dot off';
+      statusEl.textContent = '비활성화됨';
+      addLog(`Waffle ${idx} 비활성화됨`, 'warn');
+    }
+    updateUI();
+    render(lastPoses);
+  }
+
+  function markReady(idx) {
+    const i = idx - 1;
+    if (state.keepout[i]) return;
+    state.keepout[i] = true;
+    if (state.selected[i]) {
+      document.getElementById(`dot-${idx}`).className = 'dot ready';
+      document.getElementById(`rstatus-${idx}`).textContent = '준비 완료';
+      addLog(`Waffle ${idx} 구동 준비 완료`, 'success');
+    }
+    updateUI();
+  }
+
+  async function sendStart() {
+    const selectedRobots = [];
+    if (state.selected[0]) selectedRobots.push(1);
+    if (state.selected[1]) selectedRobots.push(2);
+
+    try {
+      const res = await fetch('/start', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selected: selectedRobots })
+      });
+      const data = await res.json();
+      if (data.status === 'ok' || data.status === 'already') {
+        state.running = true;
+        state.paused = false;
+        document.querySelectorAll('#btn-a, #btn-c').forEach(b => b.disabled = false);
+        addLog('미션 시작됨 — ' + (data.message || ''), 'success');
+        updateUI();
+        connectLogStream();
+      } else {
+        addLog('미션 시작 불가: ' + data.message, 'error');
+      }
+    } catch (e) { addLog('미션 시작 실패: ' + e.message, 'error'); }
+  }
+
+  async function togglePause() {
+    if (!state.running) return;
+    const endpoint = state.paused ? '/resume' : '/pause';
+    try {
+      const res = await fetch(endpoint, { method: 'POST' });
+      const data = await res.json();
+      state.paused = !state.paused;
+      addLog(data.message, state.paused ? 'warn' : 'success');
+      updateUI();
+    } catch (e) { addLog('명령 실패: ' + e.message, 'error'); }
+  }
+
+  async function sendSignal(wp) {
+    try {
+      const res = await fetch(`/signal/${wp}`, { method: 'POST' });
+      const data = await res.json();
+      addLog(`신호 전송 [${wp}] — ` + (data.message || ''), 'warn');
+    } catch (e) { addLog(`신호 전송 실패 [${wp}]: ` + e.message, 'error'); }
+  }
+
+  const evtSource = new EventSource('/ready_stream');
+  evtSource.onmessage = function (e) {
+    if (e.data === 'ready_1') markReady(1);
+    if (e.data === 'ready_2') markReady(2);
+    if (state.keepout[0] && state.keepout[1]) evtSource.close();
+  };
+  evtSource.onerror = function () {};
+
+  let logSource = null;
+  function connectLogStream() {
+    logSource = new EventSource('/log_stream');
+    logSource.onmessage = function (e) {
+      try { const entry = JSON.parse(e.data); addLog(entry.msg, entry.level); } catch (_) {}
+    };
+    logSource.onerror = function () {
+      logSource.close();
+      if (state.running) setTimeout(connectLogStream, 2000);
+    };
+  }
+
+  addLog('시스템 초기화 완료. 로봇 구동 대기 중', 'info');
+
+  // 서버의 현재 미션 상태로 UI 복원 (탭 이동/새로고침 후 동기화)
+  async function initFromServer() {
+    try {
+      const res = await fetch('/state');
+      if (!res.ok) throw new Error();
+      const s = await res.json();
+
+      state.selected[0] = (s.selected || []).includes(1);
+      state.selected[1] = (s.selected || []).includes(2);
+      state.keepout[0]  = !!(s.ready && s.ready['1']);
+      state.keepout[1]  = !!(s.ready && s.ready['2']);
+      state.running     = !!s.started;
+      state.paused      = !!s.paused;
+
+      // 로봇 카드 DOM 반영
+      [1, 2].forEach(function (idx) {
+        const i = idx - 1;
+        const card = document.getElementById('card-' + idx);
+        const dot = document.getElementById('dot-' + idx);
+        const statusEl = document.getElementById('rstatus-' + idx);
+        if (state.selected[i]) {
+          card.classList.add('selected');
+          if (state.keepout[i]) { dot.className = 'dot ready'; statusEl.textContent = '준비 완료'; }
+          else                  { dot.className = 'dot waiting'; statusEl.textContent = '구동 대기 중'; }
+        } else {
+          card.classList.remove('selected');
+          dot.className = 'dot off';
+          statusEl.textContent = '비활성화됨';
+        }
+      });
+
+      // 미션 실행 중이면 외부신호 버튼 활성화 + 로그 스트림 재연결
+      if (state.running) {
+        document.querySelectorAll('#btn-a, #btn-c').forEach(function (b) { b.disabled = false; });
+        connectLogStream();
+      }
+    } catch (e) {
+      // 서버 상태 못 받으면 기본값 유지
+    }
+    updateUI();
+  }
+
+  initFromServer();
+
+  // ==========================================
+  // 배터리 스트림
+  // ==========================================
+  const batteryAlertedIds = new Set(); // 이미 경고 로그 띄운 로봇 추적
+
+  const batterySource = new EventSource('/battery_stream');
+  batterySource.onmessage = function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      const alerts = [];
+
+      [1, 2].forEach(id => {
+        if (data[id] === undefined) return;
+        const pct = Math.min(100, Math.max(0, data[id]));
+        const bar  = document.getElementById(`bat-bar-${id}`);
+        const text = document.getElementById(`bat-text-${id}`);
+        if (!bar) return;
+
+        bar.style.width = pct + '%';
+
+        // 색상: 10% 이하 빨강, 30% 이하 주황, 그 외 초록
+        let icon, color;
+        if (pct <= 10) {
+          color = 'var(--red)';   icon = 'ti-battery-1';
+        } else if (pct <= 30) {
+          color = 'var(--amber)'; icon = 'ti-battery-2';
+        } else {
+          color = 'var(--green)'; icon = 'ti-battery-3';
+        }
+        bar.style.background = color;
+        text.innerHTML = `<i class="ti ${icon}" style="color:${color}"></i> ${pct.toFixed(1)}%`;
+
+        // 10% 이하면 경고 목록에 추가
+        if (pct <= 10) {
+          alerts.push(`Waffle ${id} ${pct.toFixed(1)}%`);
+          // 로그는 처음 한 번만
+          if (!batteryAlertedIds.has(id)) {
+            batteryAlertedIds.add(id);
+            addLog(`⚠ Waffle ${id} 배터리 부족! (${pct.toFixed(1)}%)`, 'error');
+          }
+        } else {
+          batteryAlertedIds.delete(id); // 충전되면 다시 경고 가능하게
+        }
+      });
+
+      // 토스트 경고
+      const alertEl = document.getElementById('battery-alert');
+      if (alerts.length > 0) {
+        document.getElementById('alert-msg').textContent = '배터리 부족! ' + alerts.join(' / ');
+        alertEl.classList.add('show');
+      } else {
+        alertEl.classList.remove('show');
+      }
+    } catch(err) { console.error('배터리 파싱 에러:', err); }
+  };
+
+  // ==========================================
+  // 실시간 맵 렌더링 (Canvas) 스크립트
+  // ==========================================
+  
+  const canvas = document.getElementById('mapCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const MAP_W = 69;
+  const MAP_H = 48;
+  const SCALE = 8;
+
+  canvas.width = MAP_H * SCALE;
+  canvas.height = MAP_W * SCALE;
+  ctx.imageSmoothingEnabled = false;
+
+  const MAP_RESOLUTION = 0.050;
+  const MAP_ORIGIN_X = -1.950;
+  const MAP_ORIGIN_Y = -1.182;
+
+  const mapImg = new Image();
+  let mapLoaded = false;
+  let lastPoses = {};
+  mapImg.onload = () => { mapLoaded = true; render(lastPoses); };
+  mapImg.src = '/static/map.png';
+
+  function rosToCanvas(x, y) {
+      const px = (x - MAP_ORIGIN_X) / MAP_RESOLUTION;
+      const py = (y - MAP_ORIGIN_Y) / MAP_RESOLUTION;
+      return { x: px * SCALE, y: (MAP_H - py) * SCALE };
+  }
+
+  function applyRotation() {
+      ctx.translate(canvas.width, 0);
+      ctx.rotate(Math.PI / 2);
+  }
+
+  function rotatePoint(p) {
+      return { x: canvas.width - p.y, y: p.x };
+  }
+
+  function drawCross(cx, cy, color) {
+      cx = Math.round(cx); cy = Math.round(cy);
+      ctx.fillStyle = color;
+      ctx.fillRect(cx - 9, cy - 1, 18, 3);
+      ctx.fillRect(cx - 1, cy - 9, 3, 18);
+  }
+
+  function drawArrow(cx, cy, theta, color) {
+      const dx = Math.sin(theta);
+      const dy = Math.cos(theta);
+      const px = -dy, py = dx;
+      const front = 11, back = 7, half = 7;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(cx + dx * front,            cy + dy * front);
+      ctx.lineTo(cx - dx * back + px * half, cy - dy * back + py * half);
+      ctx.lineTo(cx - dx * back - px * half, cy - dy * back - py * half);
+      ctx.closePath();
+      ctx.fill();
+  }
+
+  function drawMarker(cx, cy, theta, color) {
+      if (typeof theta === 'number') drawArrow(cx, cy, theta, color);
+      else drawCross(cx, cy, color);
+  }
+
+  function render(poses) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      applyRotation();
+      if (mapLoaded) ctx.drawImage(mapImg, 0, 0, MAP_W * SCALE, MAP_H * SCALE);
+      ctx.restore();
+
+      // state.selected[0]=로봇1, [1]=로봇2 — 선택된 로봇만 그림
+      if (state.selected[0] && poses[1] && typeof poses[1].x === 'number') {
+          const p1 = rotatePoint(rosToCanvas(poses[1].x, poses[1].y));
+          drawMarker(p1.x, p1.y, poses[1].theta, '#38bdf8');
+      }
+      if (state.selected[1] && poses[2] && typeof poses[2].x === 'number') {
+          const p2 = rotatePoint(rosToCanvas(poses[2].x, poses[2].y));
+          drawMarker(p2.x, p2.y, poses[2].theta, '#f87171');
+      }
+  }
+
+  const poseSource = new EventSource('/pose_stream');
+  poseSource.onmessage = function(event) {
+      try {
+          lastPoses = JSON.parse(event.data);
+          render(lastPoses);
+      } catch (e) {
+          console.error("Pose 파싱 에러:", e);
+      }
+  };
+
+  // ==========================================
+  // 페이지 이탈 시 SSE 연결 정리 (탭 이동 시 연결 누적 방지)
+  // ==========================================
+  window.addEventListener('pagehide', function () {
+    [evtSource, poseSource, batterySource, logSource].forEach(function (s) {
+      try { if (s) s.close(); } catch (_) {}
+    });
+  });
+</script>
+</body>
+</html>
